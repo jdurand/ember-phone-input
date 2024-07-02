@@ -23,7 +23,6 @@ export interface MetaData {
 
 export interface PhoneInputArgs {
   number: string | null;
-  update: (number: string | null, meta: MetaData) => void;
   country?: string;
   disabled?: boolean;
   required?: boolean;
@@ -35,6 +34,9 @@ export interface PhoneInputArgs {
   onlyCountries?: string[];
   preferredCountries?: string[];
   separateDialCode?: boolean;
+  intlTelInputOptions?: object;
+  onInitialize?: (phoneInputInstance: PhoneInputComponent) => void;
+  update: (number: string | null, meta: MetaData) => void;
   onError?: (error: unknown) => void;
 }
 
@@ -47,18 +49,21 @@ export interface PhoneInputSignature {
   A phone-input component. Usage:
   ```hbs
     <PhoneInput
-    allowDropdown=false
-    autoPlaceholder='aggressive'
-    customPlaceholder='Enter phone number'
-    disabled=true
-    required=required
-    autocomplete=autocomplete
-    initialCountry='fr'
-    number='123'
-    onlyCountries=europeanCountries
-    preferredCountries=englishSpeakingCountries
-    separateDialCode=true
-    update=(action 'handleUpdate')/>
+      allowDropdown=false
+      autoPlaceholder='aggressive'
+      customPlaceholder='Enter phone number'
+      disabled=true
+      required=required
+      autocomplete=autocomplete
+      initialCountry='fr'
+      number='123'
+      onlyCountries=europeanCountries
+      preferredCountries=englishSpeakingCountries
+      separateDialCode=true
+      intlTelInputOptions=(hash strictMode=true)
+      onInitialize=(action 'handleInit')
+      update=(action 'handleUpdate')
+    />
   ```
 
   @class PhoneInput
@@ -69,11 +74,20 @@ export default class PhoneInputComponent extends Component<PhoneInputSignature> 
 
   isLoadingIntlTelInput = false;
   type = 'tel';
+  onInitialize: (phoneInputInstance: PhoneInputComponent) => void;
   update: (number: string | null, meta: MetaData) => void;
   private intlTelInputInstance: intlTelInput.Plugin | null = null;
 
   constructor(owner: Owner, args: PhoneInputArgs) {
     super(owner, args);
+
+    /**
+     * You can implement this function to retrieve the phoneInput instance
+     * @argument onInitialize
+     * @param {PhoneInputComponent} reference to the phoneInput instance
+     */
+
+    this.onInitialize = this.args.onInitialize || function (): void {};
 
     /**
      * You have to implement this function to update the `number`.
@@ -105,6 +119,13 @@ export default class PhoneInputComponent extends Component<PhoneInputSignature> 
       "`autoPlaceholder` possible values are 'polite', 'aggressive' and 'off'",
       validAutoPlaceholder
     );
+
+    if (this.intlTelInputOptions) {
+      assert(
+        '`intlTelInputOptions` must be of type string',
+        typeof this.intlTelInputOptions === 'object'
+      );
+    }
   }
 
   /**
@@ -229,6 +250,16 @@ export default class PhoneInputComponent extends Component<PhoneInputSignature> 
     return this.args.separateDialCode || false;
   }
 
+  /**
+   * Pass in options directly to intlTelInput.
+   * Defaults to null.
+   * @argument intlTelInputOptions
+   * @type {object|null}
+   */
+  get intlTelInputOptions(): object | null {
+    return this.args.intlTelInputOptions || null;
+  }
+
   @action
   onInput(event?: Event): boolean {
     const internationalPhoneNumber =
@@ -312,10 +343,11 @@ export default class PhoneInputComponent extends Component<PhoneInputSignature> 
       initialCountry,
       onlyCountries,
       preferredCountries,
-      separateDialCode
+      separateDialCode,
+      intlTelInputOptions
     } = this;
 
-    const options: intlTelInput.Options = {
+    let options: intlTelInput.Options = {
       autoInsertDialCode: false,
       nationalMode: true,
       allowDropdown,
@@ -330,6 +362,10 @@ export default class PhoneInputComponent extends Component<PhoneInputSignature> 
       options.customPlaceholder = (): string => customPlaceholder;
     }
 
+    if (intlTelInputOptions) {
+      options = { ...options, ...intlTelInputOptions };
+    }
+
     const intlTelInputInstance = this.phoneInput.intlTelInput(element, options);
 
     if (this.number) {
@@ -341,6 +377,8 @@ export default class PhoneInputComponent extends Component<PhoneInputSignature> 
     if (this.initialCountry) {
       this.intlTelInputInstance.setCountry(this.initialCountry);
     }
+
+    this.onInitialize(this);
 
     this.update(this.number, this.metaData(intlTelInputInstance));
   }
